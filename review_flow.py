@@ -6,11 +6,10 @@ GitHub access is read-only. No test execution, CI-status fetch, or PR posting.
 from __future__ import annotations
 
 import json
-import os
 import re
 from pathlib import Path
 
-from agent import MODEL, OLLAMA_MODEL, github_get, ollama_chat, get_pull_request, valid_number, REPO_PATTERN
+from agent import MODEL, github_get, ollama_chat, get_pull_request, valid_number, REPO_PATTERN
 
 SKILL_PATH = Path(__file__).parent / ".agents/skills/appium-pr-review/SKILL.md"
 MAX_FILES = 30
@@ -171,7 +170,7 @@ def ask_role(provider: str, role: str, prompt: str, payload: dict) -> str:
         result = ollama_chat([
             {"role": "system", "content": instructions},
             {"role": "user", "content": question},
-        ])
+        ], tools_enabled=False)
         return result.get("content") or ""
     if provider == "openai":
         from openai import OpenAI
