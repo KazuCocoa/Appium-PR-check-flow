@@ -19,6 +19,8 @@
   <form id="ask-form">
     <label for="question">Ask about a GitHub PR</label>
     <textarea id="question" rows="4" maxlength="2000" required>Summarize the open PRs in appium/appium</textarea>
+    <label for="provider">LLM provider</label>
+    <select id="provider"><option value="ollama" selected>Ollama (local)</option><option value="openai">OpenAI API</option></select>
     <button id="submit" type="submit">Ask Agent</button>
   </form>
   <h2>Answer</h2>
@@ -39,7 +41,7 @@
         const response = await fetch('/api/ask', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({question: document.getElementById('question').value})
+          body: JSON.stringify({question: document.getElementById('question').value, provider: document.getElementById('provider').value})
         });
         const body = await response.json();
         if (!response.ok) throw new Error(body.detail || 'Request failed');
