@@ -168,12 +168,12 @@ def execute_tool(name, arguments, on_tool=None):
     return result
 
 
-def ollama_chat(messages):
+def ollama_chat(messages, tools_enabled=True):
     """Call locally hosted Ollama (no API key, no external endpoint)."""
     body = json.dumps({
         "model": OLLAMA_MODEL,
         "messages": messages,
-        "tools": ollama_tools(),
+        **({"tools": ollama_tools()} if tools_enabled else {}),
         "stream": False,
     }).encode("utf-8")
     request = Request(
