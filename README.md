@@ -168,3 +168,13 @@ The staged explanations are intentionally maintained in `docs/`:
 - **Model missing**: run `ollama pull qwen3.5:9b`.
 - **Model does not call tools**: use a model that supports tool calling; inspect CLI stderr or the browser tool trace.
 - **GitHub 403**: GitHub rate limits may apply; set a read-only `GITHUB_TOKEN`.
+
+### Review report formats
+
+The staged CLI defaults to JSON for compatibility. Use `--format markdown`
+with `--review` to print the same Markdown returned by the review API.
+After the Verifier, a deterministic Report Writer formats only retained,
+line-anchored findings and observations, PR metadata, and review status.
+It makes no further provider call. The JSON includes the execution order in
+`trace` and flags malformed specialist responses in `invalid_stages`.
+The legacy JSON `summary` contains model commentary and is excluded from Markdown.
