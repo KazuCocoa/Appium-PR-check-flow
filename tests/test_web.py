@@ -35,6 +35,22 @@ class WebTests(unittest.TestCase):
         self.assertEqual(self.client.post("/api/ask", json={"question": "hi", "provider": "bad"}).status_code, 422)
         self.assertEqual(result.json()["tools"][0]["tool"], "list_pull_requests")
 
+    def test_staged_review(self):
+        report = {"findings": [], "coverage": {"complete": False}}
+        with patch.object(web, "review_pr", return_value=report) as mock:
+            response = self.client.post("/api/review", json={
+                "repo": "appium/appium", "number": 23131, "provider": "ollama"
+            })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), report)
+        mock.assert_called_once_with("appium/appium", 23131, provider="ollama")
+
+    def test_staged_review_bad_number(self):
+        response = self.client.post("/api/review", json={
+            "repo": "appium/appium", "number": 0
+        })
+        self.assertEqual(response.status_code, 422)
+
     def test_index(self):
         self.assertEqual(self.client.get("/").status_code, 200)
 
