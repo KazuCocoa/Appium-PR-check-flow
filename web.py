@@ -3,6 +3,8 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from markdown_it import MarkdownIt
 from pydantic import BaseModel, Field
 from typing import Literal
 
@@ -13,6 +15,12 @@ app = FastAPI(title="Appium PR Check Flow", docs_url="/docs")
 INDEX = Path(__file__).parent / "static" / "index.html"
 
 
+app.mount("/static", StaticFiles(directory=INDEX.parent), name="static")
+# Both model text and repository content are untrusted. Disable raw HTML
+# and remote images; markdown-it also rejects unsafe link protocols.
+renderer = MarkdownIt("commonmark", {"html": False}).enable("table").disable("image")
+
+
 class AgentRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
     provider: Literal['openai', 'ollama'] = 'openai'
@@ -20,6 +28,7 @@ class AgentRequest(BaseModel):
 
 class AgentResponse(BaseModel):
     answer: str
+    html: str
     tools: list[dict]
 
 
@@ -49,7 +58,7 @@ def ask(request: AgentRequest):
     except Exception as exc:
         # Do not leak tokens, request headers, or upstream error bodies to web clients.
         raise HTTPException(status_code=502, detail="Agent execution failed; check server logs") from None
-    return AgentResponse(answer=answer, tools=events)
+    return AgentResponse(answer=answer, html=renderer.render(answer), tools=events)
 
 
 class ReviewRequest(BaseModel):
@@ -62,6 +71,9 @@ class ReviewRequest(BaseModel):
 def staged_review(request: ReviewRequest):
     """Bounded read-only review; returns coverage and evidence metadata."""
     try:
-        return review_pr(request.repo, request.number, provider=request.provider)
+        report = review_pr(request.repo, request.number, provider=request.provider)
+        if "markdown" in report:
+            return {**report, "html": renderer.render(report["markdown"])}
+        return report
     except Exception:
         raise HTTPException(status_code=502, detail="Review execution failed; check server logs") from None
