@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Appium PR Check Flow</title>
+  <style>
+    :root { font-family: system-ui, sans-serif; color-scheme: light dark; }
+    body { max-width: 800px; margin: 3rem auto; padding: 0 1.25rem; line-height: 1.55; }
+    textarea { box-sizing: border-box; width: 100%; padding: 12px; font: inherit; }
+    button { padding: 10px 20px; cursor: pointer; margin-top: 8px; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 1rem; background: rgba(127,127,127,.12); border-radius: 8px; }
+    .note { opacity: .7; }
+  </style>
+</head>
+<body>
+  <h1>Appium PR Check Flow</h1>
+  <p class="note">Local read-only agent. Outputs are not guaranteed code reviews.</p>
+  <form id="ask-form">
+    <label for="question">Ask about a GitHub PR</label>
+    <textarea id="question" rows="4" maxlength="2000" required>Summarize the open PRs in appium/appium</textarea>
+    <button id="submit" type="submit">Ask Agent</button>
+  </form>
+  <h2>Answer</h2>
+  <pre id="answer" aria-live="polite">Enter a question to begin.</pre>
+  <h2>Tools executed</h2>
+  <pre id="tools">—</pre>
+  <script>
+    const form = document.getElementById('ask-form');
+    const button = document.getElementById('submit');
+    const answer = document.getElementById('answer');
+    const tools = document.getElementById('tools');
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      button.disabled = true;
+      answer.textContent = 'Running…';
+      tools.textContent = '—';
+      try {
+        const response = await fetch('/api/ask', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({question: document.getElementById('question').value})
+        });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.detail || 'Request failed');
+        answer.textContent = body.answer;
+        tools.textContent = JSON.stringify(body.tools, null, 2);
+      } catch (error) {
+        answer.textContent = String(error);
+      } finally {
+        button.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
