@@ -46,10 +46,10 @@ pip install -r requirements.txt
 
 ### Option A: Local Ollama (no OpenAI API key)
 
-Install Ollama from [ollama.com](https://ollama.com/download), then in another terminal:
+Install Ollama from [ollama.com](https://ollama.com/download), then pull the default 9B model (recommended for a 24GB Apple Silicon Mac):
 
 ```bash
-ollama pull qwen3:4b
+ollama pull qwen3.5:9b
 ollama serve
 ```
 
@@ -65,7 +65,7 @@ python agent.py --provider ollama "Summarize the diff of appium/appium PR #23086
 Model selection:
 
 ```bash
-export OLLAMA_MODEL=qwen3:4b
+export OLLAMA_MODEL=qwen3.5:9b
 export LLM_PROVIDER=ollama
 python agent.py "Show open PRs in appium/appium"
 ```
@@ -118,6 +118,6 @@ Unit tests use mocked model and GitHub responses, so no OpenAI key, running Olla
 ## Troubleshooting
 
 - **Connection refused**: make sure Ollama is running on port 11434.
-- **Model missing**: run `ollama pull qwen3:4b`.
+- **Model missing**: run `ollama pull qwen3.5:9b`.
 - **Model does not call tools**: use a model that supports tool calling; inspect CLI stderr or the browser tool trace.
 - **GitHub 403**: GitHub rate limits may apply; set a read-only `GITHUB_TOKEN`.
