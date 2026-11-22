@@ -10,6 +10,9 @@ import agent
 
 
 class OllamaTests(unittest.TestCase):
+    def test_default_model(self):
+        self.assertEqual(agent.OLLAMA_MODEL, "qwen3.5:9b")
+
     def test_tool_schema_conversion(self):
         converted = agent.ollama_tools()
         self.assertEqual(len(converted), len(agent.TOOLS))
