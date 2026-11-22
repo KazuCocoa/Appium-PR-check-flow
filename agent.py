@@ -138,7 +138,7 @@ INSTRUCTIONS = (
     "Never invent PR details. Answer in the user's language."
 )
 
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:4b")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3.5:9b")
 OLLAMA_ENDPOINT = "http://127.0.0.1:11434/api/chat"
 
 
