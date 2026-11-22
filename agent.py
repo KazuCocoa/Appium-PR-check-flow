@@ -277,7 +277,9 @@ def main():
     parser.add_argument("--quiet", action="store_true", help="Hide tool trace on stderr")
     parser.add_argument("--provider", choices=("openai", "ollama"),
                         default=os.getenv("LLM_PROVIDER", "openai"), help="LLM backend")
-    parser.add_argument("--review", metavar="OWNER/REPO#NUMBER",\n                        help="Run staged evidence-backed Scout/Reviewer/Verifier review")\n    args = parser.parse_args()
+    parser.add_argument("--review", metavar="OWNER/REPO#NUMBER",
+                        help="Run staged evidence-backed Scout/Reviewer/Verifier review")
+    args = parser.parse_args()
 
     def trace(name, arguments, _result):
         if not args.quiet:
