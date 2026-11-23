@@ -174,9 +174,13 @@ def parse_model_json(content: str) -> dict:
     return {**parsed, "valid": True}
 
 
+def role_messages(role: str, skill: str, payload: dict) -> tuple[str, str]:
+    instructions = role + "\n\nShared Skill (instructions, not a tool):\n" + skill
+    return instructions, json.dumps(payload, ensure_ascii=False)
+
+
 def ask_role(provider: Provider, role: str, prompt: str, payload: dict) -> str:
-    instructions = role + "\n\nShared Skill (instructions, not a tool):\n" + prompt
-    question = json.dumps(payload, ensure_ascii=False)
+    instructions, question = role_messages(role, prompt, payload)
     if len(question) > 85000:
         raise ValueError("Evidence exceeds role prompt budget")
     if provider == "ollama":
@@ -198,7 +202,9 @@ def review_pr(repo: str, number: int, provider: Provider = "ollama", role_runner
     if provider not in {"ollama", "openai"}:
         raise ValueError("Unknown provider")
     trace = []
-    diagnostics = os.getenv("REVIEW_DEBUG") == "1"
+    debug_mode = os.getenv("REVIEW_DEBUG")
+    full_text = debug_mode == "full"
+    diagnostics = debug_mode in ("1", "full")
     run_id = uuid4().hex if diagnostics else None
     started = monotonic()
 
@@ -228,7 +234,11 @@ def review_pr(repo: str, number: int, provider: Provider = "ollama", role_runner
 
     def step(name, role, payload):
         record(name)
-        log("llm.request", stage=name, input_fields=list(payload))
+        request_text = {}
+        if full_text:
+            instructions, user_input = role_messages(role, skill, payload)
+            request_text = {"instructions": instructions, "input": user_input}
+        log("llm.request", stage=name, input_fields=list(payload), **request_text)
         before = monotonic()
         try:
             response = runner(provider, role, skill, payload)
@@ -236,7 +246,7 @@ def review_pr(repo: str, number: int, provider: Provider = "ollama", role_runner
             log("llm.failed", stage=name, error_type=type(exc).__name__)
             raise
         log("llm.response", stage=name, duration_ms=round((monotonic() - before) * 1000),
-            response_chars=len(response))
+            response_chars=len(response), **({"response": response} if full_text else {}))
         return response
 
     scout = step("scout", SCOUT_PROMPT, evidence)[:MAX_OUTPUT_CHARS]

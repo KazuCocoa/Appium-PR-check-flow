@@ -42,6 +42,22 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(rows[-1]["invalid_stages"], ["verifier"])
         self.assertNotIn(FINDING["quote"], output.getvalue())
 
+    def test_full_log_matches_provider_messages_and_raw_responses(self):
+        output = io.StringIO()
+        responses = ["調査\n結果", " invalid JSON\n", '{"findings":[]}']
+        with (patch.dict(os.environ, {"REVIEW_DEBUG": "full"}), redirect_stderr(output),
+              patch.object(flow, "collect_evidence", return_value=evidence()),
+              patch.object(flow, "ollama_chat", side_effect=[{"content": r} for r in responses]) as chat):
+            flow.review_pr("appium/appium", 12)
+        rows = [json.loads(line) for line in output.getvalue().splitlines()]
+        requests = [row for row in rows if row["event"] == "llm.request"]
+        self.assertEqual(len(requests), 3)
+        for logged, call in zip(requests, chat.call_args_list):
+            system, user = call.args[0]
+            self.assertEqual(logged["instructions"], system["content"])
+            self.assertEqual(logged["input"], user["content"])
+        self.assertEqual([row["response"] for row in rows if row["event"] == "llm.response"], responses)
+
     def test_invalid_response_is_visible(self):
         report = self.review({"findings": []}, {"unexpected": True})
         self.assertIn("verifier returned an invalid response", report["markdown"])

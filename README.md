@@ -194,7 +194,12 @@ Follow one `run_id` across evidence collection, the three role calls, JSON parsi
 anchor validation, the Verifier's exact-match filter, and report completion.
 Each request lists the input field names. Responses record character count and
 duration. A malformed JSON result appears as `json.parsed` with `valid: false`.
-The trace omits prompt text, diffs, raw responses, and exception messages.
+With `REVIEW_DEBUG=1`, the trace omits prompt text, diffs and raw responses.
+Set `REVIEW_DEBUG=full` to include the role instructions and shared Skill
+(`instructions`), the serialized user payload (`input`), and the returned text
+before parsing or truncation (`response`). Pair events by `run_id` and `stage`.
+Full logs can contain private PR descriptions, code and model output.
+For the Web UI, this setting applies to every staged review in that server process.
 
 To see the same flow offline, run this fixture. Its Verifier deliberately changes
 a finding's claim while preserving its quote. Look for `new_or_changed: 1` and
