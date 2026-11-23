@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from agent import Provider, run_agent
 from review_flow import review_pr
+from workflows import AGENTS, WorkflowRequest, execute_workflow
 
 app = FastAPI(title="Appium PR Check Flow", docs_url="/docs")
 INDEX = Path(__file__).parent / "static" / "index.html"
@@ -87,6 +88,21 @@ def staged_review(request: ReviewRequest):
 @app.post("/api/review/stream")
 async def stream_review(request: ReviewRequest):
     """Send newline-delimited stage events and one terminal result per request."""
+    return stream_events(lambda notify: review_pr(request.repo, request.number, provider=request.provider,
+                                                 on_stage=notify))
+
+
+@app.get("/api/workflows/agents")
+def registered_agents():
+    return [{"id": key, "label": label} for key, (label, _) in AGENTS.items()]
+
+
+@app.post("/api/workflows/run")
+def run_workflow(request: WorkflowRequest):
+    return stream_events(lambda notify: execute_workflow(request, notify))
+
+
+def stream_events(execute):
     async def events():
         send, receive = anyio.create_memory_object_stream(1)
 
@@ -95,8 +111,7 @@ async def stream_review(request: ReviewRequest):
                 anyio.from_thread.run(send.send, event)
 
             try:
-                report = review_pr(request.repo, request.number, provider=request.provider,
-                                   on_stage=lambda stage: publish({"stage": stage}))
+                report = execute(lambda stage: publish({"stage": stage}))
                 if "error" in report:
                     publish({"error": report["error"]})
                 else:
