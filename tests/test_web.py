@@ -24,14 +24,15 @@ class WebTests(unittest.TestCase):
         self.assertEqual(self.client.post("/api/ask", json={"question": ""}).status_code, 422)
 
     def test_ask(self):
-        def fake_run(question, on_tool=None):
+        def fake_run(question, on_tool=None, provider='openai'):
             on_tool("list_pull_requests", {"repo": "appium/appium"}, [])
             return "Found PRs"
 
         with patch.object(web, "run_agent", fake_run):
-            result = self.client.post("/api/ask", json={"question": "list PRs"})
+            result = self.client.post("/api/ask", json={"question": "list PRs", "provider": "ollama"})
         self.assertEqual(result.status_code, 200)
         self.assertEqual(result.json()["answer"], "Found PRs")
+        self.assertEqual(self.client.post("/api/ask", json={"question": "hi", "provider": "bad"}).status_code, 422)
         self.assertEqual(result.json()["tools"][0]["tool"], "list_pull_requests")
 
     def test_index(self):

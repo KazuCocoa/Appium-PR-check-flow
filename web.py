@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
+from typing import Literal
 
 from agent import run_agent
 
@@ -13,6 +14,7 @@ INDEX = Path(__file__).parent / "static" / "index.html"
 
 class AgentRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
+    provider: Literal['openai', 'ollama'] = 'openai'
 
 
 class AgentResponse(BaseModel):
@@ -42,7 +44,7 @@ def ask(request: AgentRequest):
         })
 
     try:
-        answer = run_agent(request.question, on_tool=on_tool)
+        answer = run_agent(request.question, on_tool=on_tool, provider=request.provider)
     except Exception as exc:
         # Do not leak tokens, request headers, or upstream error bodies to web clients.
         raise HTTPException(status_code=502, detail="Agent execution failed; check server logs") from None
