@@ -3,15 +3,17 @@
 These are logical role-separated agents using the same selected LLM backend. All
 GitHub access is read-only. No test execution, CI-status fetch, or PR posting.
 """
-from __future__ import annotations
-
 import json
+import os
 import re
+import sys
+from time import monotonic
+from uuid import uuid4
 from pathlib import Path
 
 from report_writer import write_report
 
-from agent import MODEL, github_get, ollama_chat, get_pull_request, valid_number, REPO_PATTERN
+from agent import MODEL, Provider, github_get, ollama_chat, get_pull_request, valid_number, REPO_PATTERN
 
 SKILL_PATH = Path(__file__).parent / ".agents/skills/appium-pr-review/SKILL.md"
 MAX_FILES = 30
@@ -172,9 +174,13 @@ def parse_model_json(content: str) -> dict:
     return {**parsed, "valid": True}
 
 
-def ask_role(provider: str, role: str, prompt: str, payload: dict) -> str:
-    instructions = role + "\n\nShared Skill (instructions, not a tool):\n" + prompt
-    question = json.dumps(payload, ensure_ascii=False)
+def role_messages(role: str, skill: str, payload: dict) -> tuple[str, str]:
+    instructions = role + "\n\nShared Skill (instructions, not a tool):\n" + skill
+    return instructions, json.dumps(payload, ensure_ascii=False)
+
+
+def ask_role(provider: Provider, role: str, prompt: str, payload: dict) -> str:
+    instructions, question = role_messages(role, prompt, payload)
     if len(question) > 85000:
         raise ValueError("Evidence exceeds role prompt budget")
     if provider == "ollama":
@@ -190,48 +196,86 @@ def ask_role(provider: str, role: str, prompt: str, payload: dict) -> str:
     raise ValueError("Unknown provider")
 
 
-def review_pr(repo: str, number: int, provider: str = "ollama", role_runner=None,
+def review_pr(repo: str, number: int, provider: Provider = "ollama", role_runner=None,
               on_stage=None) -> dict:
     """Separate Scout, Reviewer and Verifier calls; deterministic evidence gate."""
     if provider not in {"ollama", "openai"}:
         raise ValueError("Unknown provider")
     trace = []
+    debug_mode = os.getenv("REVIEW_DEBUG")
+    full_text = debug_mode == "full"
+    diagnostics = debug_mode in ("1", "full")
+    run_id = uuid4().hex if diagnostics else None
+    started = monotonic()
+
+    def log(event, **details):
+        if diagnostics:
+            row = {"run_id": run_id, "elapsed_ms": round((monotonic() - started) * 1000),
+                   "event": event, **details}
+            print(json.dumps(row), file=sys.stderr, flush=True)
+
+    log("review.start", repo=repo, number=number, provider=provider)
 
     def record(name):
         trace.append(name)
+        log("stage.start", stage=name)
         if on_stage:
             on_stage(name)
 
     record("evidence")
     evidence = collect_evidence(repo, number)
     if "error" in evidence:
+        log("review.failed", stage="evidence")
         return evidence
+    log("evidence.ready", files=len(evidence["files"]), complete=evidence["coverage"]["complete"],
+        head_sha=evidence["head_sha"])
     skill = load_skill()
     runner = role_runner or ask_role
 
     def step(name, role, payload):
         record(name)
-        return runner(provider, role, skill, payload)
+        request_text = {}
+        if full_text:
+            instructions, user_input = role_messages(role, skill, payload)
+            request_text = {"instructions": instructions, "input": user_input}
+        log("llm.request", stage=name, input_fields=list(payload), **request_text)
+        before = monotonic()
+        try:
+            response = runner(provider, role, skill, payload)
+        except Exception as exc:
+            log("llm.failed", stage=name, error_type=type(exc).__name__)
+            raise
+        log("llm.response", stage=name, duration_ms=round((monotonic() - before) * 1000),
+            response_chars=len(response), **({"response": response} if full_text else {}))
+        return response
 
     scout = step("scout", SCOUT_PROMPT, evidence)[:MAX_OUTPUT_CHARS]
     reviewer = parse_model_json(step("reviewer", REVIEWER_PROMPT, {
         "evidence": evidence, "scout_suggestions_unverified": scout,
     }))
+    log("json.parsed", stage="reviewer", valid=reviewer["valid"])
     candidates = {}
     rejected = 0
     for key in ("findings", "observations"):
         candidates[key], dropped = validate_findings(reviewer, evidence, key)
         rejected += len(dropped)
+        log("anchors.checked", stage="reviewer", kind=key, accepted=len(candidates[key]),
+            rejected=len(dropped))
     verifier = parse_model_json(step("verifier", VERIFIER_PROMPT, {
         "evidence": evidence, "candidate_findings": candidates["findings"],
         "candidate_observations": candidates["observations"],
     }))
+    log("json.parsed", stage="verifier", valid=verifier["valid"])
     final = {}
     for key in candidates:
         checked, dropped = validate_findings(verifier, evidence, key)
         final[key] = [item for item in candidates[key] if item in checked]
-        rejected += len(dropped) + sum(item not in candidates[key] for item in checked)
-        rejected += len(candidates[key]) - len(final[key])
+        new_or_changed = sum(item not in candidates[key] for item in checked)
+        omitted = len(candidates[key]) - len(final[key])
+        rejected += len(dropped) + new_or_changed + omitted
+        log("verifier.filtered", kind=key, invalid_anchor_or_fields=len(dropped),
+            new_or_changed=new_or_changed, reviewer_candidates_not_retained=omitted,
+            retained=len(final[key]))
     report = {
         **final,
         "title": evidence.get("pr_metadata", {}).get("title", ""),
@@ -252,4 +296,6 @@ def review_pr(repo: str, number: int, provider: str = "ollama", role_runner=None
     record("report_writer")
     report["markdown"] = write_report(report)
     report["trace"] = trace
+    log("review.finished", findings=len(final["findings"]), observations=len(final["observations"]),
+        invalid_stages=report["invalid_stages"])
     return report

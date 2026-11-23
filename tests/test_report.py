@@ -1,4 +1,7 @@
+import io
 import json
+import os
+from contextlib import redirect_stderr
 import unittest
 from unittest.mock import patch
 
@@ -25,6 +28,35 @@ class ReportTests(unittest.TestCase):
         self.assertNotIn("Replacement claim", report["markdown"])
         self.assertIn("src/test.py:11", report["markdown"])
         self.assertEqual(report["trace"], ["evidence", "scout", "reviewer", "verifier", "report_writer"])
+
+    def test_diagnostics_capture_decisions_without_model_text(self):
+        output = io.StringIO()
+        with patch.dict(os.environ, {"REVIEW_DEBUG": "1"}), redirect_stderr(output):
+            self.review({"findings": [FINDING]}, {"unexpected": True})
+        rows = [json.loads(line) for line in output.getvalue().splitlines()]
+        self.assertEqual(len({row["run_id"] for row in rows}), 1)
+        calls = [row["stage"] for row in rows if row["event"] == "llm.request"]
+        self.assertEqual(calls, ["scout", "reviewer", "verifier"])
+        parsed = [row["valid"] for row in rows if row["event"] == "json.parsed"]
+        self.assertEqual(parsed, [True, False])
+        self.assertEqual(rows[-1]["invalid_stages"], ["verifier"])
+        self.assertNotIn(FINDING["quote"], output.getvalue())
+
+    def test_full_log_matches_provider_messages_and_raw_responses(self):
+        output = io.StringIO()
+        responses = ["調査\n結果", " invalid JSON\n", '{"findings":[]}']
+        with (patch.dict(os.environ, {"REVIEW_DEBUG": "full"}), redirect_stderr(output),
+              patch.object(flow, "collect_evidence", return_value=evidence()),
+              patch.object(flow, "ollama_chat", side_effect=[{"content": r} for r in responses]) as chat):
+            flow.review_pr("appium/appium", 12)
+        rows = [json.loads(line) for line in output.getvalue().splitlines()]
+        requests = [row for row in rows if row["event"] == "llm.request"]
+        self.assertEqual(len(requests), 3)
+        for logged, call in zip(requests, chat.call_args_list):
+            system, user = call.args[0]
+            self.assertEqual(logged["instructions"], system["content"])
+            self.assertEqual(logged["input"], user["content"])
+        self.assertEqual([row["response"] for row in rows if row["event"] == "llm.response"], responses)
 
     def test_invalid_response_is_visible(self):
         report = self.review({"findings": []}, {"unexpected": True})

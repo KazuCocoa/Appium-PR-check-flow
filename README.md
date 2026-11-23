@@ -34,14 +34,14 @@ All GitHub actions are **read-only**.
 
 ## Setup
 
-Python 3.10+:
+Use Python 3.15 for new environments. The minimum supported version is Python 3.10.
 
 ```bash
 git clone https://github.com/KazuCocoa/Appium-PR-check-flow.git
 cd Appium-PR-check-flow
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
 ### Option A: Local Ollama (no OpenAI API key)
@@ -178,3 +178,33 @@ line-anchored findings and observations, PR metadata, and review status.
 It makes no further provider call. The JSON includes the execution order in
 `trace` and flags malformed specialist responses in `invalid_stages`.
 The legacy JSON `summary` contains model commentary and is excluded from Markdown.
+
+### Follow a staged review in detail
+
+Set `REVIEW_DEBUG=1` for a CLI review or for the process serving the Web UI.
+Both emit one JSON event per line to standard error. The CLI's `--quiet`
+suppresses its ordinary stage messages, keeping the diagnostic file machine-readable.
+
+```bash
+REVIEW_DEBUG=1 python agent.py --quiet --provider ollama --review 'appium/appium#23131' > report.json 2> review.jsonl
+REVIEW_DEBUG=1 python -m uvicorn web:app --host 127.0.0.1 --port 8000
+```
+
+Follow one `run_id` across evidence collection, the three role calls, JSON parsing,
+anchor validation, the Verifier's exact-match filter, and report completion.
+Each request lists the input field names. Responses record character count and
+duration. A malformed JSON result appears as `json.parsed` with `valid: false`.
+With `REVIEW_DEBUG=1`, the trace omits prompt text, diffs and raw responses.
+Set `REVIEW_DEBUG=full` to include the role instructions and shared Skill
+(`instructions`), the serialized user payload (`input`), and the returned text
+before parsing or truncation (`response`). Pair events by `run_id` and `stage`.
+Full logs can contain private PR descriptions, code and model output.
+For the Web UI, this setting applies to every staged review in that server process.
+
+To see the same flow offline, run this fixture. Its Verifier deliberately changes
+a finding's claim while preserving its quote. Look for `new_or_changed: 1` and
+`retained: 0` in the findings event.
+
+```bash
+PYTHONPATH=tests REVIEW_DEBUG=1 python -m unittest test_report.ReportTests.test_only_retained_statements_reach_markdown
+```

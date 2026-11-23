@@ -9,9 +9,8 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from markdown_it import MarkdownIt
 from pydantic import BaseModel, Field
-from typing import Literal
 
-from agent import run_agent
+from agent import Provider, run_agent
 from review_flow import review_pr
 
 app = FastAPI(title="Appium PR Check Flow", docs_url="/docs")
@@ -26,7 +25,7 @@ renderer = MarkdownIt("commonmark", {"html": False}).enable("table").disable("im
 
 class AgentRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
-    provider: Literal['openai', 'ollama'] = 'openai'
+    provider: Provider = "openai"
 
 
 class AgentResponse(BaseModel):
@@ -67,7 +66,7 @@ def ask(request: AgentRequest):
 class ReviewRequest(BaseModel):
     repo: str = Field(min_length=3, max_length=150)
     number: int = Field(gt=0)
-    provider: Literal["ollama", "openai"] = "ollama"
+    provider: Provider = "ollama"
 
 
 def render_report(report):
