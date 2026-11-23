@@ -4,8 +4,11 @@ import json
 import os
 import re
 import sys
+from typing import Literal
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+
+Provider = Literal["openai", "ollama"]
 
 MODEL = os.getenv("OPENAI_MODEL", "gpt-5-mini")
 REPO_PATTERN = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
@@ -230,7 +233,7 @@ def run_ollama_agent(question, max_steps=5, on_tool=None, chat=None):
     return "Stopped: maximum tool-call rounds reached."
 
 
-def run_agent(question, client=None, max_steps=5, on_tool=None, provider="openai"):
+def run_agent(question, client=None, max_steps=5, on_tool=None, provider: Provider = "openai"):
     if provider == "ollama":
         return run_ollama_agent(question, max_steps=max_steps, on_tool=on_tool)
     if provider != "openai":
@@ -250,15 +253,12 @@ def run_agent(question, client=None, max_steps=5, on_tool=None, provider="openai
         for call in calls:
             try:
                 args = json.loads(call.arguments)
-                handler = HANDLERS.get(call.name)
-                if handler is None:
-                    result = {"error": "Unknown tool"}
-                else:
-                    result = handler(**args)
-            except (ValueError, KeyError, TypeError) as exc:
+            except (TypeError, ValueError) as exc:
                 result = {"error": f"Invalid tool arguments: {exc}"}
-            if on_tool:
-                on_tool(call.name, args, result)
+                if on_tool:
+                    on_tool(call.name, call.arguments, result)
+            else:
+                result = execute_tool(call.name, args, on_tool=on_tool)
             outputs.append({
                 "type": "function_call_output",
                 "call_id": call.call_id,

@@ -34,14 +34,14 @@ All GitHub actions are **read-only**.
 
 ## Setup
 
-Python 3.10+:
+Use Python 3.15 for new environments. The minimum supported version is Python 3.10.
 
 ```bash
 git clone https://github.com/KazuCocoa/Appium-PR-check-flow.git
 cd Appium-PR-check-flow
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
 ### Option A: Local Ollama (no OpenAI API key)

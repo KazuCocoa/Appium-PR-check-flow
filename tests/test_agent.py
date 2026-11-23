@@ -4,7 +4,7 @@ import sys
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import agent
@@ -66,6 +66,23 @@ class ToolTests(unittest.TestCase):
         second = fake.responses.requests[1]
         self.assertEqual(second["previous_response_id"], "one")
         self.assertEqual(json.loads(second["input"][0]["output"])["number"], 10)
+
+    def test_invalid_json_reports_the_failed_call(self):
+        call = SimpleNamespace(type="function_call", name="get_pull_request",
+                               arguments="{", call_id="c1")
+        responses = [SimpleNamespace(id="one", output=[call]),
+                     SimpleNamespace(id="two", output=[], output_text="Done")]
+        create = Mock(side_effect=responses)
+        client = SimpleNamespace(responses=SimpleNamespace(create=create))
+        events = []
+        with patch.object(agent, "execute_tool") as dispatch:
+            agent.run_agent("Check PR", client=client, on_tool=lambda *event: events.append(event))
+            dispatch.assert_not_called()
+        output = create.call_args.kwargs["input"][0]
+        self.assertEqual(output["call_id"], call.call_id)
+        error = json.loads(output["output"])
+        self.assertIn("error", error)
+        self.assertEqual(events, [(call.name, call.arguments, error)])
 
     def test_no_tool_needed(self):
         response = SimpleNamespace(id="one", output=[], output_text="Hello")

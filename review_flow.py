@@ -3,8 +3,6 @@
 These are logical role-separated agents using the same selected LLM backend. All
 GitHub access is read-only. No test execution, CI-status fetch, or PR posting.
 """
-from __future__ import annotations
-
 import json
 import os
 import re
@@ -15,7 +13,7 @@ from pathlib import Path
 
 from report_writer import write_report
 
-from agent import MODEL, github_get, ollama_chat, get_pull_request, valid_number, REPO_PATTERN
+from agent import MODEL, Provider, github_get, ollama_chat, get_pull_request, valid_number, REPO_PATTERN
 
 SKILL_PATH = Path(__file__).parent / ".agents/skills/appium-pr-review/SKILL.md"
 MAX_FILES = 30
@@ -176,7 +174,7 @@ def parse_model_json(content: str) -> dict:
     return {**parsed, "valid": True}
 
 
-def ask_role(provider: str, role: str, prompt: str, payload: dict) -> str:
+def ask_role(provider: Provider, role: str, prompt: str, payload: dict) -> str:
     instructions = role + "\n\nShared Skill (instructions, not a tool):\n" + prompt
     question = json.dumps(payload, ensure_ascii=False)
     if len(question) > 85000:
@@ -194,7 +192,7 @@ def ask_role(provider: str, role: str, prompt: str, payload: dict) -> str:
     raise ValueError("Unknown provider")
 
 
-def review_pr(repo: str, number: int, provider: str = "ollama", role_runner=None,
+def review_pr(repo: str, number: int, provider: Provider = "ollama", role_runner=None,
               on_stage=None) -> dict:
     """Separate Scout, Reviewer and Verifier calls; deterministic evidence gate."""
     if provider not in {"ollama", "openai"}:
