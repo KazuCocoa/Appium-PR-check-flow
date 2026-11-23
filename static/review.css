@@ -34,3 +34,11 @@ summary { cursor: pointer; font-weight: 600; }
 #status.running { font-weight: 600; }
 #status.running::before { content: ''; display: inline-block; width: .65em; height: .65em;
   margin-right: .5em; border-radius: 50%; background: #1d614a; }
+
+#builder fieldset { border-top: 1px solid #cad8ce; padding-top: .7rem; }
+#builder legend { font-weight: 650; padding-right: .5rem; }
+#steps { display: grid; gap: .55rem; grid-column: 1 / -1; }
+.workflow-step { display: flex; align-items: center; flex-wrap: wrap; gap: .45rem; }
+.workflow-step select { width: auto; flex: 1 1 12em; }
+.workflow-step button, #add, #save { color: #24533f; background: #edf3ee; }
+#inspect details, #notes { margin-bottom: .75rem; }

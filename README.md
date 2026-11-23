@@ -208,3 +208,17 @@ a finding's claim while preserving its quote. Look for `new_or_changed: 1` and
 ```bash
 PYTHONPATH=tests REVIEW_DEBUG=1 python -m unittest test_report.ReportTests.test_only_retained_statements_reach_markdown
 ```
+
+### Custom serial workflows
+
+Open **Build a custom workflow** on the home page. Choose Behavior changes,
+Compatibility or Test coverage, set their order, and save the named definition
+in this browser. Saving the same name updates that definition. Run it against a
+PR with either provider. Each role receives the shared evidence plus the
+previous role's validated output. Expand a stage to compare its instructions,
+previous input, raw response, and retained records. An invalid response stops
+the remaining agents and produces a partial report.
+
+**Download run and notes** exports a JSON record with the selected order, PR
+head SHA, evidence, model, Skill text and digest, stage results and your
+evaluation. It can contain private PR data. The server does not keep run history.
