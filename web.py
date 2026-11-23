@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from typing import Literal
 
 from agent import run_agent
+from review_flow import review_pr
 
 app = FastAPI(title="Appium PR Check Flow", docs_url="/docs")
 INDEX = Path(__file__).parent / "static" / "index.html"
@@ -49,3 +50,18 @@ def ask(request: AgentRequest):
         # Do not leak tokens, request headers, or upstream error bodies to web clients.
         raise HTTPException(status_code=502, detail="Agent execution failed; check server logs") from None
     return AgentResponse(answer=answer, tools=events)
+
+
+class ReviewRequest(BaseModel):
+    repo: str = Field(min_length=3, max_length=150)
+    number: int = Field(gt=0)
+    provider: Literal["ollama", "openai"] = "ollama"
+
+
+@app.post("/api/review")
+def staged_review(request: ReviewRequest):
+    """Bounded read-only review; returns coverage and evidence metadata."""
+    try:
+        return review_pr(request.repo, request.number, provider=request.provider)
+    except Exception:
+        raise HTTPException(status_code=502, detail="Review execution failed; check server logs") from None

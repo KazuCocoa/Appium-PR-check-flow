@@ -23,6 +23,17 @@
     <select id="provider"><option value="ollama" selected>Ollama (local)</option><option value="openai">OpenAI API</option></select>
     <button id="submit" type="submit">Ask Agent</button>
   </form>
+  <hr>
+  <h2>Evidence-based staged review</h2>
+  <p class="note">Scout → Reviewer → Verifier. No CI verification or GitHub posting.</p>
+  <form id="review-form">
+    <label for="review-repo">Repository</label>
+    <input id="review-repo" value="appium/appium" required pattern="[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+">
+    <label for="review-number">PR number</label>
+    <input id="review-number" type="number" min="1" value="23131" required>
+    <button type="submit" id="review-button">Run staged review</button>
+  </form>
+  <pre id="review-output" aria-live="polite">No staged review yet.</pre>
   <h2>Answer</h2>
   <pre id="answer" aria-live="polite">Enter a question to begin.</pre>
   <h2>Tools executed</h2>
@@ -32,6 +43,32 @@
     const button = document.getElementById('submit');
     const answer = document.getElementById('answer');
     const tools = document.getElementById('tools');
+    const reviewForm = document.getElementById('review-form');
+    const reviewButton = document.getElementById('review-button');
+    const reviewOutput = document.getElementById('review-output');
+    reviewForm.addEventListener('submit', async event => {
+      event.preventDefault();
+      reviewButton.disabled = true;
+      reviewOutput.textContent = 'Running staged review…';
+      try {
+        const response = await fetch('/api/review', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            repo: document.getElementById('review-repo').value,
+            number: Number(document.getElementById('review-number').value),
+            provider: document.getElementById('provider').value
+          })
+        });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.detail || 'Review request failed');
+        reviewOutput.textContent = JSON.stringify(body, null, 2);
+      } catch (error) {
+        reviewOutput.textContent = String(error);
+      } finally {
+        reviewButton.disabled = false;
+      }
+    });
     form.addEventListener('submit', async event => {
       event.preventDefault();
       button.disabled = true;

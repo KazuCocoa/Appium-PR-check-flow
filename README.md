@@ -83,6 +83,39 @@ Default provider is `openai` unless `LLM_PROVIDER` is set. The OpenAI model defa
 
 For private GitHub repositories or higher GitHub rate limits, optionally set `GITHUB_TOKEN`. A token is not required for public repositories under typical API rate limits.
 
+### Evidence-based staged review (experimental)
+
+Run the new Scout → Reviewer → Verifier workflow on a particular pull request:
+
+```bash
+python agent.py --provider ollama --review appium/appium#23131
+# Or with OpenAI (requires separate API billing)
+python agent.py --provider openai --review appium/appium#23131
+```
+
+This produces a structured JSON report with the exact PR head SHA, coverage,
+model-generated candidate findings, and explicit `ci_checked: false` /
+`tests_executed: false` flags. A deterministic evidence gate checks each
+finding against an added line and an exact quoted substring in the available
+patch. That validates **where a candidate points**, not whether the proposed
+defect is actually real.
+
+The Scout, Reviewer, and Verifier are distinct **role-separated model calls**
+with a shared bounded evidence snapshot, not independent subprocesses or
+different model weights. The original interactive CLI Agent remains unchanged.
+
+The shared Skill is in
+[`.agents/skills/appium-pr-review/SKILL.md`](.agents/skills/appium-pr-review/SKILL.md).
+Both this project's staged review (via a local loader) and Codex.app (when
+this repository is opened as a workspace) can use that same skill definition.
+The generic natural-language CLI flow does **not** yet auto-discover skills.
+
+**Known limitations:** the review considers at most 30 files and bounded
+patch excerpts (up to 5,500 characters per file and 42,000 total). It does not
+read CI status, execute tests, guarantee semantic correctness, or recommend a
+merge. A truncated or missing patch is reported as incomplete. It does not
+recheck the head SHA after reviewing.
+
 ### Local Web UI
 
 ```bash
@@ -93,6 +126,12 @@ Open [http://127.0.0.1:8000](http://127.0.0.1:8000). Choose **Ollama (local)** o
 
 ```json
 {"question":"List open PRs in appium/appium","provider":"ollama"}
+```
+
+The browser also exposes the **staged review** form using `POST /api/review`:
+
+```json
+{"repo":"appium/appium","number":23131,"provider":"ollama"}
 ```
 
 Endpoint: `POST /api/ask`. Health: `GET /health`. Docs: `GET /docs`.
@@ -107,13 +146,21 @@ python -m unittest discover -s tests -v
 
 Unit tests use mocked model and GitHub responses, so no OpenAI key, running Ollama instance, or GitHub network access is needed. A real Ollama E2E check requires `ollama serve` or the desktop service and the downloaded model.
 
+## Architecture and learning notes
+
+The staged explanations are intentionally maintained in `docs/`:
+
+1. [01 — Agentic Flow vs tool calling and MCP](docs/01-agentic-flow.md)
+2. [02 — Evidence-based review and provenance](docs/02-evidence-review.md)
+3. [03 — Role-separated multi-agent flow and sharing Skills](docs/03-multi-agent-and-skills.md)
+
 ## Boundaries and planned work
 
 - One-shot questions; no persistent memory or session storage.
 - Up to 5 tool-call rounds. Read-only, no GitHub commenting or PR approval.
 - Diffs are capped; large PR reviews are **incomplete** without pagination.
 - GitHub PR text and diffs are untrusted inputs. The agent is instructed to ignore embedded instructions; this is not a complete prompt-injection defense.
-- Next: paginated diff per file, structured findings with line-level evidence, SHA consistency checks, runtime telemetry, then a comparison adapter for MCP `tools/list` and `tools/call`.
+- Next: stronger semantic verification, recheck head SHA, real CI evidence, broader multi-file analysis, runtime telemetry and an optional MCP adapter.
 
 ## Troubleshooting
 
