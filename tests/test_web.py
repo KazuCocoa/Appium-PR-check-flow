@@ -1,3 +1,4 @@
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -44,6 +45,24 @@ class WebTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), report)
         mock.assert_called_once_with("appium/appium", 23131, provider="ollama")
+
+    def test_review_stream_orders_stages_before_result(self):
+        def review(repo, number, provider, on_stage):
+            on_stage("evidence")
+            on_stage("scout")
+            return {"markdown": "## Result"}
+
+        with patch.object(web, "review_pr", review):
+            response = self.client.post("/api/review/stream", json={"repo": "a/b", "number": 1})
+        evidence, scout, result = [json.loads(line) for line in response.iter_lines()]
+        self.assertEqual(evidence, {"stage": "evidence"})
+        self.assertEqual(scout, {"stage": "scout"})
+        self.assertIn("<h2>Result</h2>", result["result"]["html"])
+
+    def test_review_stream_hides_provider_exception(self):
+        with patch.object(web, "review_pr", side_effect=RuntimeError("private details")):
+            response = self.client.post("/api/review/stream", json={"repo": "a/b", "number": 1})
+        self.assertEqual(response.json(), {"error": "Review execution failed"})
 
     def test_staged_review_bad_number(self):
         response = self.client.post("/api/review", json={

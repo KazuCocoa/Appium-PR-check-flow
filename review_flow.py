@@ -195,12 +195,6 @@ def review_pr(repo: str, number: int, provider: str = "ollama", role_runner=None
     """Separate Scout, Reviewer and Verifier calls; deterministic evidence gate."""
     if provider not in {"ollama", "openai"}:
         raise ValueError("Unknown provider")
-    evidence = collect_evidence(repo, number)
-    if "error" in evidence:
-        return evidence
-    skill = load_skill()
-    runner = role_runner or ask_role
-
     trace = []
 
     def record(name):
@@ -209,6 +203,11 @@ def review_pr(repo: str, number: int, provider: str = "ollama", role_runner=None
             on_stage(name)
 
     record("evidence")
+    evidence = collect_evidence(repo, number)
+    if "error" in evidence:
+        return evidence
+    skill = load_skill()
+    runner = role_runner or ask_role
 
     def step(name, role, payload):
         record(name)
