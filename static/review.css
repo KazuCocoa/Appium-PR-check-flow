@@ -30,3 +30,7 @@ table { border-collapse: collapse; }
 summary { cursor: pointer; font-weight: 600; }
 [hidden] { display: none !important; }
 @media (max-width: 560px) { form, fieldset { grid-template-columns: 1fr; } main { padding: 0 14px; } }
+
+#status.running { font-weight: 600; }
+#status.running::before { content: ''; display: inline-block; width: .65em; height: .65em;
+  margin-right: .5em; border-radius: 50%; background: #1d614a; }

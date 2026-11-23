@@ -35,6 +35,35 @@ function showResult(data, isReview) {
   byId('result').hidden = false;
 }
 
+const stageNames = {
+  evidence: 'Collecting PR evidence',
+  scout: 'Scout · Identifying areas to investigate',
+  reviewer: 'Reviewer · Examining the diff',
+  verifier: 'Verifier · Checking proposed findings',
+  report_writer: 'Report Writer · Formatting Markdown'
+};
+
+async function readReview(response) {
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+  let pending = '';
+  try {
+    while (true) {
+      const {value, done} = await reader.read();
+      if (done) throw new Error('Review connection closed before a result arrived.');
+      const lines = (pending + value).split('\n');
+      pending = lines.pop();
+      for (const line of lines) {
+        const event = JSON.parse(line);
+        if (event.error) throw new Error(event.error);
+        if (event.result) return event.result;
+        if (event.stage) byId('status').textContent = stageNames[event.stage] || event.stage;
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 form.addEventListener('submit', async event => {
   event.preventDefault();
   const isReview = staged();
@@ -45,18 +74,23 @@ form.addEventListener('submit', async event => {
   const enabled = [...form.elements].filter(control => !control.disabled);
   enabled.forEach(control => { control.disabled = true; });
   byId('result').hidden = true;
-  byId('status').textContent = 'Running review…';
+  byId('status').classList.add('running');
+  byId('status').textContent = isReview ? 'Starting review…' : 'Single agent · Processing your question…';
   try {
-    const response = await fetch(isReview ? '/api/review' : '/api/ask', {
+    const response = await fetch(isReview ? '/api/review/stream' : '/api/ask', {
       method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
     });
-    const data = await response.json();
-    if (!response.ok || data.error) throw new Error(data.error || (typeof data.detail === 'string' && data.detail) || 'Request failed');
+    if (!response.ok) {
+      const {detail} = await response.json();
+      throw new Error(typeof detail === 'string' ? detail : 'Request failed');
+    }
+    const data = isReview ? await readReview(response) : await response.json();
     showResult(data, isReview);
     byId('status').textContent = 'Review finished.';
   } catch (error) {
     byId('status').textContent = error.message;
   } finally {
+    byId('status').classList.remove('running');
     enabled.forEach(control => { control.disabled = false; });
   }
 });
