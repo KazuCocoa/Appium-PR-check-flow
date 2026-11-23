@@ -6,7 +6,11 @@ GitHub access is read-only. No test execution, CI-status fetch, or PR posting.
 from __future__ import annotations
 
 import json
+import os
 import re
+import sys
+from time import monotonic
+from uuid import uuid4
 from pathlib import Path
 
 from report_writer import write_report
@@ -196,42 +200,74 @@ def review_pr(repo: str, number: int, provider: str = "ollama", role_runner=None
     if provider not in {"ollama", "openai"}:
         raise ValueError("Unknown provider")
     trace = []
+    diagnostics = os.getenv("REVIEW_DEBUG") == "1"
+    run_id = uuid4().hex if diagnostics else None
+    started = monotonic()
+
+    def log(event, **details):
+        if diagnostics:
+            row = {"run_id": run_id, "elapsed_ms": round((monotonic() - started) * 1000),
+                   "event": event, **details}
+            print(json.dumps(row), file=sys.stderr, flush=True)
+
+    log("review.start", repo=repo, number=number, provider=provider)
 
     def record(name):
         trace.append(name)
+        log("stage.start", stage=name)
         if on_stage:
             on_stage(name)
 
     record("evidence")
     evidence = collect_evidence(repo, number)
     if "error" in evidence:
+        log("review.failed", stage="evidence")
         return evidence
+    log("evidence.ready", files=len(evidence["files"]), complete=evidence["coverage"]["complete"],
+        head_sha=evidence["head_sha"])
     skill = load_skill()
     runner = role_runner or ask_role
 
     def step(name, role, payload):
         record(name)
-        return runner(provider, role, skill, payload)
+        log("llm.request", stage=name, input_fields=list(payload))
+        before = monotonic()
+        try:
+            response = runner(provider, role, skill, payload)
+        except Exception as exc:
+            log("llm.failed", stage=name, error_type=type(exc).__name__)
+            raise
+        log("llm.response", stage=name, duration_ms=round((monotonic() - before) * 1000),
+            response_chars=len(response))
+        return response
 
     scout = step("scout", SCOUT_PROMPT, evidence)[:MAX_OUTPUT_CHARS]
     reviewer = parse_model_json(step("reviewer", REVIEWER_PROMPT, {
         "evidence": evidence, "scout_suggestions_unverified": scout,
     }))
+    log("json.parsed", stage="reviewer", valid=reviewer["valid"])
     candidates = {}
     rejected = 0
     for key in ("findings", "observations"):
         candidates[key], dropped = validate_findings(reviewer, evidence, key)
         rejected += len(dropped)
+        log("anchors.checked", stage="reviewer", kind=key, accepted=len(candidates[key]),
+            rejected=len(dropped))
     verifier = parse_model_json(step("verifier", VERIFIER_PROMPT, {
         "evidence": evidence, "candidate_findings": candidates["findings"],
         "candidate_observations": candidates["observations"],
     }))
+    log("json.parsed", stage="verifier", valid=verifier["valid"])
     final = {}
     for key in candidates:
         checked, dropped = validate_findings(verifier, evidence, key)
         final[key] = [item for item in candidates[key] if item in checked]
-        rejected += len(dropped) + sum(item not in candidates[key] for item in checked)
-        rejected += len(candidates[key]) - len(final[key])
+        new_or_changed = sum(item not in candidates[key] for item in checked)
+        omitted = len(candidates[key]) - len(final[key])
+        rejected += len(dropped) + new_or_changed + omitted
+        log("verifier.filtered", kind=key, invalid_anchor_or_fields=len(dropped),
+            new_or_changed=new_or_changed, reviewer_candidates_not_retained=omitted,
+            retained=len(final[key]))
     report = {
         **final,
         "title": evidence.get("pr_metadata", {}).get("title", ""),
@@ -252,4 +288,6 @@ def review_pr(repo: str, number: int, provider: str = "ollama", role_runner=None
     record("report_writer")
     report["markdown"] = write_report(report)
     report["trace"] = trace
+    log("review.finished", findings=len(final["findings"]), observations=len(final["observations"]),
+        invalid_stages=report["invalid_stages"])
     return report

@@ -1,4 +1,7 @@
+import io
 import json
+import os
+from contextlib import redirect_stderr
 import unittest
 from unittest.mock import patch
 
@@ -25,6 +28,19 @@ class ReportTests(unittest.TestCase):
         self.assertNotIn("Replacement claim", report["markdown"])
         self.assertIn("src/test.py:11", report["markdown"])
         self.assertEqual(report["trace"], ["evidence", "scout", "reviewer", "verifier", "report_writer"])
+
+    def test_diagnostics_capture_decisions_without_model_text(self):
+        output = io.StringIO()
+        with patch.dict(os.environ, {"REVIEW_DEBUG": "1"}), redirect_stderr(output):
+            self.review({"findings": [FINDING]}, {"unexpected": True})
+        rows = [json.loads(line) for line in output.getvalue().splitlines()]
+        self.assertEqual(len({row["run_id"] for row in rows}), 1)
+        calls = [row["stage"] for row in rows if row["event"] == "llm.request"]
+        self.assertEqual(calls, ["scout", "reviewer", "verifier"])
+        parsed = [row["valid"] for row in rows if row["event"] == "json.parsed"]
+        self.assertEqual(parsed, [True, False])
+        self.assertEqual(rows[-1]["invalid_stages"], ["verifier"])
+        self.assertNotIn(FINDING["quote"], output.getvalue())
 
     def test_invalid_response_is_visible(self):
         report = self.review({"findings": []}, {"unexpected": True})
