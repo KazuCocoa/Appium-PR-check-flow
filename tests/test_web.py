@@ -51,6 +51,22 @@ class WebTests(unittest.TestCase):
         })
         self.assertEqual(response.status_code, 422)
 
+    def test_answer_markdown_renders_tables_and_escapes_html(self):
+        answer = "# Review\n\n|File|Line|\n|---|---|\n|x.py|4|\n\n<script>alert(1)</script>\n\n![x](https://example.org/p.png)"
+        with patch.object(web, "run_agent", return_value=answer):
+            body = self.client.post("/api/ask", json={"question": "review"}).json()
+        self.assertEqual(body["answer"], answer)
+        self.assertIn("<table>", body["html"])
+        self.assertIn("&lt;script&gt;", body["html"])
+        self.assertNotIn("<img", body["html"])
+
+    def test_review_serves_rendered_and_source_formats(self):
+        with patch.object(web, "review_pr", return_value={"markdown": "## Findings", "findings": []}):
+            body = self.client.post("/api/review", json={"repo": "a/b", "number": 1}).json()
+        self.assertEqual(body["markdown"], "## Findings")
+        self.assertIn("<h2>Findings</h2>", body["html"])
+        self.assertEqual(body["findings"], [])
+
     def test_index(self):
         self.assertEqual(self.client.get("/").status_code, 200)
 

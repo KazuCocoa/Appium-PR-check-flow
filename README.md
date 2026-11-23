@@ -122,7 +122,7 @@ recheck the head SHA after reviewing.
 python -m uvicorn web:app --host 127.0.0.1 --port 8000
 ```
 
-Open [http://127.0.0.1:8000](http://127.0.0.1:8000). Choose **Ollama (local)** or **OpenAI API** from the dropdown, ask a question, and inspect the tool execution trace. The API accepts:
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000). Choose **Ollama (local)** or **OpenAI API** and a workflow. **Single agent** accepts a question and shows the tool calls. **Staged multi-agent review** accepts a repository and PR number, then shows the rendered report, patch coverage, CI/test status, and execution trace. Expand **Structured JSON** to inspect the source result. The API accepts:
 
 ```json
 {"question":"List open PRs in appium/appium","provider":"ollama"}
