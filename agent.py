@@ -279,6 +279,8 @@ def main():
                         default=os.getenv("LLM_PROVIDER", "openai"), help="LLM backend")
     parser.add_argument("--review", metavar="OWNER/REPO#NUMBER",
                         help="Run staged evidence-backed Scout/Reviewer/Verifier review")
+    parser.add_argument("--format", choices=("json", "markdown"), default="json",
+                        help="Output format for --review (default: json)")
     args = parser.parse_args()
 
     def trace(name, arguments, _result):
@@ -294,7 +296,10 @@ def main():
                            provider=args.provider,
                            on_stage=lambda stage: print(f"[stage] {stage}", file=sys.stderr)
                            if not args.quiet else None)
-        print(json.dumps(report, indent=2, ensure_ascii=False))
+        if args.format == "markdown" and "markdown" in report:
+            print(report["markdown"])
+        else:
+            print(json.dumps(report, indent=2, ensure_ascii=False))
     else:
         print(run_agent(args.question, on_tool=trace, provider=args.provider))
 
