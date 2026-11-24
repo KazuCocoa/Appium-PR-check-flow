@@ -43,27 +43,6 @@ const stageNames = {
   report_writer: 'Report Writer · Formatting Markdown'
 };
 
-async function readReview(response) {
-  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
-  let pending = '';
-  try {
-    while (true) {
-      const {value, done} = await reader.read();
-      if (done) throw new Error('Review connection closed before a result arrived.');
-      const lines = (pending + value).split('\n');
-      pending = lines.pop();
-      for (const line of lines) {
-        const event = JSON.parse(line);
-        if (event.error) throw new Error(event.error);
-        if (event.result) return event.result;
-        if (event.stage) byId('status').textContent = stageNames[event.stage] || event.stage;
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
-}
-
 form.addEventListener('submit', async event => {
   event.preventDefault();
   const isReview = staged();
@@ -84,7 +63,9 @@ form.addEventListener('submit', async event => {
       const {detail} = await response.json();
       throw new Error(typeof detail === 'string' ? detail : 'Request failed');
     }
-    const data = isReview ? await readReview(response) : await response.json();
+    const data = isReview ? await readReview(response, stage => {
+      byId('status').textContent = stageNames[stage] || stage;
+    }) : await response.json();
     showResult(data, isReview);
     byId('status').textContent = 'Review finished.';
   } catch (error) {
